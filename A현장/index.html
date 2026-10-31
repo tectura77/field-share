@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>비콘현장캠</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #141414; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif; }
+  .app-shell { display: flex; flex-direction: column; width: 100%; height: 100%; }
+
+  /* 1. 상단 헤더 바 */
+  .top-hdr { height: 32px; background: #000; padding: 0 8px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #222; flex-shrink: 0; }
+  .hdr-left { display: flex; align-items: center; gap: 7px; }
+  .hdr-title { font-size: 13.5px; font-weight: 800; color: #fff; letter-spacing: 0.4px; }
+  .hdr-right { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #FFD54F; font-weight: bold; }
+  .copy-btn { background: #00897B; color: #fff; border: 1px solid #4DB6AC; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; }
+  .copy-btn:active { background: #00695C; }
+
+  /* 2. 카테고리 탭 바 */
+  .cat-bar { height: 28px; background: #181818; padding: 0 8px; display: flex; align-items: center; gap: 5px; overflow-x: auto; white-space: nowrap; flex-shrink: 0; }
+  .cat-bar::-webkit-scrollbar, .dong-bar::-webkit-scrollbar, .thumb-bar::-webkit-scrollbar { display: none; }
+  .tab-chip { padding: 2.5px 9px; border-radius: 4px; font-size: 11.5px; font-weight: bold; cursor: pointer; border: 0.8px solid rgba(255,255,255,0.22); background: #2C2C2C; color: rgba(255,255,255,0.75); flex-shrink: 0; }
+  .tab-chip.cat-active { background: #40C4FF; color: #000; border-color: #40C4FF; }
+
+  /* 3. 동 선택 탭 바 */
+  .dong-bar { height: 28px; background: #1C1C1C; padding: 0 8px; display: flex; align-items: center; gap: 5px; overflow-x: auto; white-space: nowrap; flex-shrink: 0; border-bottom: 1px solid #282828; }
+  .tab-chip.dong-active { background: #FFC107; color: #000; border-color: #FFC107; }
+
+  /* 4. 본문 영역 (골구도 + 조절바 + 큰 사진 뷰어) */
+  .main-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; position: relative; }
+  .golgudo-pane { height: 58.0%; overflow-y: auto; padding: 2px 6px; background: #141414; flex-shrink: 0; }
+  .golgudo-box { background: #181818; border: 0.8px solid rgba(255,255,255,0.22); border-radius: 4px; padding: 4px; }
+  .g-row { display: flex; align-items: center; margin-bottom: 1px; }
+  .f-lbl { width: 30px; font-size: 9.5px; font-weight: bold; color: rgba(255,255,255,0.7); flex-shrink: 0; }
+  .u-cell { flex: 1; margin: 0 1px; padding: 2px 1px; text-align: center; font-size: 9.5px; font-weight: bold; border-radius: 3px; background: #262626; color: rgba(255,255,255,0.7); border: 0.7px solid rgba(255,255,255,0.12); cursor: pointer; user-select: none; overflow: hidden; white-space: nowrap; }
+  .u-cell.has-photo { background: #2E7D32; color: #fff; border-color: #69F0AE; }
+  .u-cell.selected { background: #FFC107 !important; color: #000 !important; border: 1.4px solid #fff !important; }
+
+  /* 골구도와 사진 사이 드래그 조절바 */
+  .splitter-bar { height: 16px; width: 100%; background: #263238; border-top: 0.7px solid rgba(255,255,255,0.2); border-bottom: 0.7px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; gap: 6px; cursor: row-resize; touch-action: none; user-select: none; flex-shrink: 0; z-index: 5; }
+  .splitter-pill { width: 34px; height: 4px; border-radius: 2px; background: #40C4FF; }
+  .splitter-txt { font-size: 9.5px; color: #80D8FF; font-weight: bold; }
+
+  /* 큰 사진 영역 (왜곡 방지를 위해 object-fit: contain 적용) */
+  .photo-pane { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; background: #000; overflow: hidden; }
+
+  @media (orientation: landscape) {
+    .main-body { flex-direction: row !important; }
+    .golgudo-pane { width: 42%; height: 100% !important; }
+    .splitter-bar { width: 16px !important; height: 100% !important; flex-direction: column; cursor: col-resize; border-top: none; border-bottom: none; border-left: 0.7px solid rgba(255,255,255,0.2); border-right: 0.7px solid rgba(255,255,255,0.2); }
+    .splitter-pill { width: 4px; height: 34px; }
+    .splitter-txt { display: none; }
+    /* 가로로 돌렸을 때는 조치전·조치후 사진이 위아래가 아닌 좌우 배치! */
+    .photo-pane { flex: 1; height: 100% !important; flex-direction: row !important; gap: 3px; }
+  }
+
+  html, body, .app-shell { touch-action: manipulation; }
+  .img-box { position: relative; flex: 1; width: 100%; height: 100%; min-height: 0; min-width: 0; background: #000; border: 0.6px solid rgba(255,255,255,0.12); overflow: hidden; display: flex; align-items: center; justify-content: center; touch-action: none; }
+  .img-box img { width: 100%; height: 100%; object-fit: contain; display: block; transform-origin: center center; will-change: transform; user-select: none; -webkit-user-drag: none; }
+  .img-badge { position: absolute; top: 6px; left: 8px; padding: 4px 8px; border-radius: 5px; font-size: 11px; font-weight: bold; color: #fff; z-index: 2; }
+  .badge-before { background: rgba(21, 101, 192, 0.92); border: 1px solid #40C4FF; }
+  .badge-after { background: rgba(0, 105, 92, 0.9); border: 1px solid #64FFDA; }
+  .empty-box { flex: 1; display: flex; align-items: center; justify-content: center; background: #181818; color: rgba(255,255,255,0.45); font-size: 12px; }
+
+  /* 5. 하단 메모 바 + 맨 밑 작은 사진(썸네일) 스트립 */
+  .bottom-area { flex-shrink: 0; display: flex; flex-direction: column; background: #141414; }
+  .memo-bar { min-height: 40px; padding: 5px 8px; background: #1A1A1A; border-top: 0.8px solid rgba(255,255,255,0.22); display: flex; align-items: center; }
+  .memo-box { width: 100%; min-height: 30px; background: #121212; border: 1px solid rgba(255,255,255,0.22); border-radius: 6px; padding: 6px 10px; color: #fff; font-size: 12.5px; line-height: 1.3; white-space: pre-wrap; word-break: break-all; }
+  .memo-placeholder { color: rgba(255,255,255,0.38); }
+
+  .thumb-bar { height: 76px; padding: 5px 6px; background: #121212; border-top: 0.8px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 8px; overflow-x: auto; }
+  .thumb-item { position: relative; width: 66px; height: 66px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.24); overflow: hidden; flex-shrink: 0; cursor: pointer; background: #000; }
+  .thumb-item.active { border: 2.4px solid #FFC107; }
+  .thumb-item img.single-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb-split { width: 100%; height: 100%; display: flex; flex-direction: column; }
+  .thumb-split img { width: 100%; height: 50%; object-fit: cover; display: block; }
+  .thumb-idx { position: absolute; top: 2px; left: 2px; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: bold; background: rgba(0,0,0,0.7); color: #fff; }
+  .thumb-item.active .thumb-idx { background: #FFC107; color: #000; }
+  .thumb-tag { position: absolute; bottom: 2px; right: 2px; padding: 1px 3px; border-radius: 3px; font-size: 8px; font-weight: bold; background: rgba(0,105,92,0.88); color: #fff; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="top-hdr">
+    <div class="hdr-left">
+      <svg width="24" height="24" viewBox="0 0 24 24">
+        <rect x="0.5" y="0.5" width="23" height="23" rx="5.5" fill="#0B1622" stroke="#1B334D" stroke-width="1"/>
+        <circle cx="12" cy="10.2" r="6.6" fill="none" stroke="#1F4E78" stroke-width="1.4"/>
+        <polyline points="13.8,6.8 9.5,10.2 13.8,13.6" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="7.5" cy="20" r="1.05" fill="#00E5FF"/>
+        <circle cx="10.5" cy="20" r="1.05" fill="#00E5FF"/>
+        <circle cx="13.5" cy="20" r="1.05" fill="#00E5FF"/>
+        <circle cx="16.5" cy="20" r="1.05" fill="#00E5FF"/>
+      </svg>
+      <span class="hdr-title">촬영</span>
+      <select id="dateFilterSel" style="margin-left:4px; background:#262626; color:#FFC107; border:1px solid #FFC107; border-radius:4px; font-size:10.5px; font-weight:bold; padding:1px 4px; outline:none;">
+        <option value="전체">전체날짜</option>
+      </select>
+    </div>
+    <div class="hdr-right">
+      <span id="unitStatusTxt">101동 1층 1호 (101호)</span>
+      <button class="copy-btn" id="copyHtmlBtn" onclick="copyReportData()">📋 복사하기</button>
+    </div>
+  </div>
+
+  <div class="cat-bar" id="catBar"><div class="tab-chip cat-active">전체(1)</div></div>
+  <div class="dong-bar" id="dongBar"><div class="tab-chip dong-active">101동(1)</div></div>
+
+  <div class="main-body" id="mainBody">
+    <div class="golgudo-pane" id="golgudoPane">
+      <div class="golgudo-box" id="golgudoBox"><div class="g-row"><div class="f-lbl">18F</div><div class="u-cell">1801</div><div class="u-cell">1802</div><div class="u-cell">1803</div><div class="u-cell">1804</div></div><div class="g-row"><div class="f-lbl">17F</div><div class="u-cell">1701</div><div class="u-cell">1702</div><div class="u-cell">1703</div><div class="u-cell">1704</div></div><div class="g-row"><div class="f-lbl">16F</div><div class="u-cell">1601</div><div class="u-cell">1602</div><div class="u-cell">1603</div><div class="u-cell">1604</div></div><div class="g-row"><div class="f-lbl">15F</div><div class="u-cell">1501</div><div class="u-cell">1502</div><div class="u-cell">1503</div><div class="u-cell">1504</div></div><div class="g-row"><div class="f-lbl">14F</div><div class="u-cell">1401</div><div class="u-cell">1402</div><div class="u-cell">1403</div><div class="u-cell">1404</div></div><div class="g-row"><div class="f-lbl">13F</div><div class="u-cell">1301</div><div class="u-cell">1302</div><div class="u-cell">1303</div><div class="u-cell">1304</div></div><div class="g-row"><div class="f-lbl">12F</div><div class="u-cell">1201</div><div class="u-cell">1202</div><div class="u-cell">1203</div><div class="u-cell">1204</div></div><div class="g-row"><div class="f-lbl">11F</div><div class="u-cell">1101</div><div class="u-cell">1102</div><div class="u-cell">1103</div><div class="u-cell">1104</div></div><div class="g-row"><div class="f-lbl">10F</div><div class="u-cell">1001</div><div class="u-cell">1002</div><div class="u-cell">1003</div><div class="u-cell">1004</div></div><div class="g-row"><div class="f-lbl">9F</div><div class="u-cell">901</div><div class="u-cell">902</div><div class="u-cell">903</div><div class="u-cell">904</div></div><div class="g-row"><div class="f-lbl">8F</div><div class="u-cell">801</div><div class="u-cell">802</div><div class="u-cell">803</div><div class="u-cell">804</div></div><div class="g-row"><div class="f-lbl">7F</div><div class="u-cell">701</div><div class="u-cell">702</div><div class="u-cell">703</div><div class="u-cell">704</div></div><div class="g-row"><div class="f-lbl">6F</div><div class="u-cell">601</div><div class="u-cell">602</div><div class="u-cell">603</div><div class="u-cell">604</div></div><div class="g-row"><div class="f-lbl">5F</div><div class="u-cell">501</div><div class="u-cell">502</div><div class="u-cell">503</div><div class="u-cell">504</div></div><div class="g-row"><div class="f-lbl">4F</div><div class="u-cell">401</div><div class="u-cell">402</div><div class="u-cell">403</div><div class="u-cell">404</div></div><div class="g-row"><div class="f-lbl">3F</div><div class="u-cell">301</div><div class="u-cell">302</div><div class="u-cell">303</div><div class="u-cell">304</div></div><div class="g-row"><div class="f-lbl">2F</div><div class="u-cell">201</div><div class="u-cell">202</div><div class="u-cell">203</div><div class="u-cell">204</div></div><div class="g-row"><div class="f-lbl">1F</div><div class="u-cell has-photo selected">📷101(1)</div><div class="u-cell">102</div><div class="u-cell">103</div><div class="u-cell">104</div></div></div>
+    </div>
+    <div class="splitter-bar" id="splitterBar">
+      <div class="splitter-pill"></div>
+      <span class="splitter-txt">영역조절</span>
+    </div>
+    <div class="photo-pane" id="photoPane"><div class="img-box"><div class="img-badge badge-before">공종: 미지정 (1/1)</div><img src="https://raw.githubusercontent.com/tectura77/field-share/main/A현장/photos/b_101_1_1_photo_1793451702609.jpg" alt="사진" /></div></div>
+  </div>
+
+  <div class="bottom-area" id="bottomArea">
+    <div class="memo-bar">
+      <div class="memo-box" id="memoBox">[작성: 이경훈]</div>
+    </div>
+    <div class="thumb-bar" id="thumbBar"><div class="thumb-item active"><img class="single-thumb" src="https://raw.githubusercontent.com/tectura77/field-share/main/A현장/photos/b_101_1_1_photo_1793451702609.jpg" /><div class="thumb-idx">1</div></div></div>
+  </div>
+</div>
+
+<script>
+const BUILDINGS = [{"dongName":"101동","maxFloor":18,"maxHo":4}];
+const CATEGORIES = ["전체"];
+const BEACON_MAPPINGS = {};
+const PHOTOS = [{"photoKey":"101동_1_1_2026-10-31 22:01_b_101_1_1_photo_1793451702609.jpg","dong":"101동","floor":1,"ho":1,"category":"","memo":"[작성: 이경훈]","timestamp":"2026-10-31 22:01","afterTimestamp":"","uploader":"이경훈","beforeSrc":"https://raw.githubusercontent.com/tectura77/field-share/main/A현장/photos/b_101_1_1_photo_1793451702609.jpg","beforeRel":"photos/b_101_1_1_photo_1793451702609.jpg","afterSrc":null,"afterRel":null}];
+const CLIP_PAYLOAD = "{\"golgudoHtmlExportV1\":true,\"buildings\":[{\"dongName\":\"101동\",\"maxFloor\":18,\"maxHo\":4}],\"categories\":[\"전체\"],\"beaconMappings\":{},\"photos\":[{\"photoKey\":\"101동_1_1_2026-10-31 22:01_b_101_1_1_photo_1793451702609.jpg\",\"dong\":\"101동\",\"floor\":1,\"ho\":1,\"category\":\"\",\"memo\":\"[작성: 이경훈]\",\"timestamp\":\"2026-10-31 22:01\",\"afterTimestamp\":\"\",\"uploader\":\"이경훈\",\"beforeSrc\":\"https://raw.githubusercontent.com/tectura77/field-share/main/A현장/photos/b_101_1_1_photo_1793451702609.jpg\",\"beforeRel\":\"photos/b_101_1_1_photo_1793451702609.jpg\",\"afterSrc\":null,\"afterRel\":null}]}";
+
+let selectedCat = "전체";
+let selectedDate = '전체';
+let selectedDong = "101동";
+
+function extractDateFromPhoto(p) {
+  const t = (p.timestamp || '').trim();
+  if (t.length >= 10) return t.substring(0, 10);
+  const at = (p.afterTimestamp || '').trim();
+  if (at.length >= 10) return at.substring(0, 10);
+  return '';
+}
+
+function matchesHtmlDate(p) {
+  if (selectedDate === '전체') return true;
+  const d1 = (p.timestamp || '').trim().substring(0, 10);
+  const d2 = (p.afterTimestamp || '').trim().substring(0, 10);
+  return d1 === selectedDate || d2 === selectedDate;
+}
+
+(function initDateFilterOptions() {
+  const sel = document.getElementById('dateFilterSel');
+  if (!sel) return;
+  const dSet = new Set();
+  PHOTOS.forEach(p => {
+    const d1 = extractDateFromPhoto(p);
+    if (d1) dSet.add(d1);
+  });
+  const sorted = Array.from(dSet).sort().reverse();
+  sorted.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = d.length >= 10 ? d.substring(5) : d;
+    sel.appendChild(opt);
+  });
+  sel.onchange = () => {
+    selectedDate = sel.value;
+    selectedPhotoIdx = 0;
+    if (getPhotosForCell(selectedDong, selectedFloor, selectedHo).length === 0) {
+      autoSelectFirstPhotoUnitInDong(selectedDong);
+    }
+    renderAll();
+  };
+})();
+let selectedFloor = 1;
+let selectedHo = 1;
+let selectedPhotoIdx = 0;
+let portraitSingleRatio = 0.58;
+let portraitAfterRatio = 0.36;
+let landscapeRatio = 0.42;
+let currentHasAfter = false;
+
+function applyPaneSize() {
+  const gPane = document.getElementById('golgudoPane');
+  if (!gPane) return;
+  const isLand = window.matchMedia('(orientation: landscape)').matches;
+  if (isLand) {
+    gPane.style.width = (landscapeRatio * 100).toFixed(1) + '%';
+    gPane.style.height = '100%';
+  } else {
+    const r = currentHasAfter ? portraitAfterRatio : portraitSingleRatio;
+    gPane.style.height = (r * 100).toFixed(1) + '%';
+    gPane.style.width = '100%';
+  }
+}
+
+window.addEventListener('resize', applyPaneSize);
+
+if (!BUILDINGS.some(b => b.dongName === selectedDong) && BUILDINGS.length > 0) {
+  selectedDong = BUILDINGS[0].dongName;
+}
+
+function getBuilding(dongName) {
+  return BUILDINGS.find(b => b.dongName === dongName) || BUILDINGS[0] || { dongName: '101동', maxFloor: 18, maxHo: 4 };
+}
+
+function getPhotosForCell(dong, floor, ho) {
+  return PHOTOS.filter(p => {
+    if (p.dong !== dong || p.floor !== floor || p.ho !== ho) return false;
+    if (!matchesHtmlDate(p)) return false;
+    if (selectedCat === '전체') return true;
+    return p.category === selectedCat;
+  });
+}
+
+function autoSelectFirstPhotoUnitInDong(dongName) {
+  const matched = PHOTOS.filter(p => {
+    if (p.dong !== dongName) return false;
+    if (!matchesHtmlDate(p)) return false;
+    if (selectedCat === '전체') return true;
+    return p.category === selectedCat;
+  });
+  if (matched.length > 0) {
+    selectedFloor = matched[0].floor;
+    selectedHo = matched[0].ho;
+  } else {
+    const b = getBuilding(dongName);
+    selectedFloor = Math.min(selectedFloor, b.maxFloor);
+    selectedHo = Math.min(selectedHo, b.maxHo);
+  }
+  selectedPhotoIdx = 0;
+}
+
+function renderAll() {
+  renderCatBar();
+  renderDongBar();
+  renderGolgudo();
+  renderPhotosAndBottom();
+}
+
+function renderCatBar() {
+  const bar = document.getElementById('catBar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const cnt = PHOTOS.filter(p => matchesHtmlDate(p) && (cat === '전체' ? true : p.category === cat)).length;
+    const btn = document.createElement('div');
+    btn.className = 'tab-chip' + (cat === selectedCat ? ' cat-active' : '');
+    btn.textContent = cat + '(' + cnt + ')';
+    btn.onclick = () => {
+      selectedCat = cat;
+      selectedPhotoIdx = 0;
+      const curCellPhotos = getPhotosForCell(selectedDong, selectedFloor, selectedHo);
+      if (curCellPhotos.length === 0) {
+        autoSelectFirstPhotoUnitInDong(selectedDong);
+      }
+      renderAll();
+    };
+    bar.appendChild(btn);
+  });
+}
+
+function renderDongBar() {
+  const bar = document.getElementById('dongBar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  BUILDINGS.forEach(b => {
+    const cnt = PHOTOS.filter(p => {
+      if (p.dong !== b.dongName) return false;
+      if (!matchesHtmlDate(p)) return false;
+      if (selectedCat === '전체') return true;
+      return p.category === selectedCat;
+    }).length;
+    const btn = document.createElement('div');
+    btn.className = 'tab-chip' + (b.dongName === selectedDong ? ' dong-active' : '');
+    btn.textContent = b.dongName + '(' + cnt + ')';
+    btn.onclick = () => {
+      selectedDong = b.dongName;
+      autoSelectFirstPhotoUnitInDong(selectedDong);
+      renderAll();
+      scrollGolgudoToBottom();
+    };
+    bar.appendChild(btn);
+  });
+}
+
+function renderGolgudo() {
+  const box = document.getElementById('golgudoBox');
+  if (!box) return;
+  box.innerHTML = '';
+  const bCfg = getBuilding(selectedDong);
+  for (let f = bCfg.maxFloor; f >= 1; f--) {
+    const row = document.createElement('div');
+    row.className = 'g-row';
+    const fLbl = document.createElement('div');
+    fLbl.className = 'f-lbl';
+    fLbl.textContent = f + 'F';
+    row.appendChild(fLbl);
+
+    for (let h = 1; h <= bCfg.maxHo; h++) {
+      const cellPhotos = getPhotosForCell(bCfg.dongName, f, h);
+      const cnt = cellPhotos.length;
+      const unitNo = f * 100 + h;
+      const isSel = (selectedDong === bCfg.dongName && selectedFloor === f && selectedHo === h);
+
+      const cell = document.createElement('div');
+      cell.className = 'u-cell' + (cnt > 0 ? ' has-photo' : '') + (isSel ? ' selected' : '');
+      cell.textContent = (isSel ? '📷' : '') + unitNo + (cnt > 0 ? '(' + cnt + ')' : '');
+      cell.onclick = () => {
+        selectedDong = bCfg.dongName;
+        selectedFloor = f;
+        selectedHo = h;
+        selectedPhotoIdx = 0;
+        renderAll();
+        centerSelectedUnitInGolgudo();
+      };
+      row.appendChild(cell);
+    }
+    box.appendChild(row);
+  }
+}
+
+function renderPhotosAndBottom() {
+  const unitPhotos = getPhotosForCell(selectedDong, selectedFloor, selectedHo);
+  const unitNo = selectedFloor * 100 + selectedHo;
+  const statusEl = document.getElementById('unitStatusTxt');
+  if (statusEl) {
+    statusEl.textContent =
+      selectedDong + ' ' + selectedFloor + '층 ' + selectedHo + '호 (' + unitNo + '호)';
+  }
+
+  const mainBody = document.getElementById('mainBody');
+  const photoPane = document.getElementById('photoPane');
+  const bottomArea = document.getElementById('bottomArea');
+  const memoBox = document.getElementById('memoBox');
+  const thumbBar = document.getElementById('thumbBar');
+  if (!photoPane || !bottomArea || !memoBox || !thumbBar) return;
+
+  photoPane.innerHTML = '';
+  thumbBar.innerHTML = '';
+
+  if (unitPhotos.length === 0) {
+    currentHasAfter = false;
+    applyPaneSize();
+    bottomArea.style.display = 'none';
+    const empty = document.createElement('div');
+    empty.className = 'empty-box';
+    empty.textContent = '선택한 세대에 사진이 없습니다.';
+    photoPane.appendChild(empty);
+    return;
+  }
+
+  bottomArea.style.display = 'flex';
+  if (selectedPhotoIdx >= unitPhotos.length) selectedPhotoIdx = 0;
+  const item = unitPhotos[selectedPhotoIdx];
+  const hasAfter = !!item.afterSrc;
+  currentHasAfter = hasAfter;
+  applyPaneSize();
+  const catTxt = item.category ? item.category : '미지정';
+
+  if (hasAfter) {
+    const beforeBox = document.createElement('div');
+    beforeBox.className = 'img-box';
+    beforeBox.innerHTML =
+      '<div class="img-badge badge-before">[조치전] 공종: ' + escapeHtml(catTxt) + ' (' + (selectedPhotoIdx + 1) + '/' + unitPhotos.length + ')</div>' +
+      '<img src="' + item.beforeSrc + '" data-rel="' + (item.beforeRel || '') + '" onerror="if(this.dataset.rel && this.src.indexOf(this.dataset.rel)===-1){this.src=this.dataset.rel;}" alt="조치전" />';
+
+    const afterBox = document.createElement('div');
+    afterBox.className = 'img-box';
+    afterBox.innerHTML =
+      '<div class="img-badge badge-after">[조치후] 공종: ' + escapeHtml(catTxt) + ' (' + (selectedPhotoIdx + 1) + '/' + unitPhotos.length + ')</div>' +
+      '<img src="' + item.afterSrc + '" data-rel="' + (item.afterRel || '') + '" onerror="if(this.dataset.rel && this.src.indexOf(this.dataset.rel)===-1){this.src=this.dataset.rel;}" alt="조치후" />';
+
+    photoPane.appendChild(beforeBox);
+    photoPane.appendChild(afterBox);
+  } else {
+    if (mainBody) mainBody.classList.remove('has-after');
+
+    const singleBox = document.createElement('div');
+    singleBox.className = 'img-box';
+    singleBox.innerHTML =
+      '<div class="img-badge badge-before">공종: ' + escapeHtml(catTxt) + ' (' + (selectedPhotoIdx + 1) + '/' + unitPhotos.length + ')</div>' +
+      '<img src="' + item.beforeSrc + '" data-rel="' + (item.beforeRel || '') + '" onerror="if(this.dataset.rel && this.src.indexOf(this.dataset.rel)===-1){this.src=this.dataset.rel;}" alt="사진" />';
+    photoPane.appendChild(singleBox);
+  }
+
+  if (item.memo && item.memo.trim().length > 0) {
+    memoBox.classList.remove('memo-placeholder');
+    memoBox.textContent = item.memo;
+  } else {
+    memoBox.classList.add('memo-placeholder');
+    memoBox.textContent = '남긴 메모 없음';
+  }
+
+  unitPhotos.forEach((p, idx) => {
+    const t = document.createElement('div');
+    t.className = 'thumb-item' + (idx === selectedPhotoIdx ? ' active' : '');
+    if (p.afterSrc) {
+      t.innerHTML =
+        '<div class="thumb-split">' +
+          '<img src="' + p.beforeSrc + '" data-rel="' + (p.beforeRel || '') + '" onerror="if(this.dataset.rel && this.src.indexOf(this.dataset.rel)===-1){this.src=this.dataset.rel;}" />' +
+          '<img src="' + p.afterSrc + '" data-rel="' + (p.afterRel || '') + '" onerror="if(this.dataset.rel && this.src.indexOf(this.dataset.rel)===-1){this.src=this.dataset.rel;}" />' +
+        '</div>' +
+        '<div class="thumb-idx">' + (idx + 1) + '</div>' +
+        '<div class="thumb-tag">전/후</div>';
+    } else {
+      t.innerHTML =
+        '<img class="single-thumb" src="' + p.beforeSrc + '" data-rel="' + (p.beforeRel || '') + '" onerror="if(this.dataset.rel && this.src.indexOf(this.dataset.rel)===-1){this.src=this.dataset.rel;}" />' +
+        '<div class="thumb-idx">' + (idx + 1) + '</div>';
+    }
+    t.onclick = () => {
+      selectedPhotoIdx = idx;
+      renderPhotosAndBottom();
+    };
+    thumbBar.appendChild(t);
+  });
+
+  bindAllPhotoZoom();
+}
+
+// 💡 전체 화면(틀) 확대 방지 및 개별 사진 영역(.img-box) 내부 핀치줌·패닝·더블탭·마우스휠 줌 지원
+document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, { passive: false });
+document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, { passive: false });
+document.addEventListener('touchmove', function(e) {
+  if (e.touches && e.touches.length > 1) {
+    e.preventDefault();
+  }
+}, { passive: false });
+
+function bindAllPhotoZoom() {
+  const boxes = document.querySelectorAll('.img-box');
+  boxes.forEach(box => {
+    if (box.dataset.zoomBound === '1') return;
+    box.dataset.zoomBound = '1';
+    const img = box.querySelector('img');
+    if (!img) return;
+
+    let scale = 1;
+    let tx = 0;
+    let ty = 0;
+    let startDist = 0;
+    let startScale = 1;
+    let isPanning = false;
+    let startX = 0;
+    let startY = 0;
+    let startTx = 0;
+    let startTy = 0;
+    let lastTapTime = 0;
+
+    function clampTranslation() {
+      if (scale <= 1.01) {
+        scale = 1;
+        tx = 0;
+        ty = 0;
+        return;
+      }
+      const rect = box.getBoundingClientRect();
+      const maxX = Math.max(0, (rect.width * (scale - 1)) / 2);
+      const maxY = Math.max(0, (rect.height * (scale - 1)) / 2);
+      tx = Math.max(-maxX, Math.min(maxX, tx));
+      ty = Math.max(-maxY, Math.min(maxY, ty));
+    }
+
+    function applyTransform() {
+      clampTranslation();
+      img.style.transform = 'translate(' + tx.toFixed(1) + 'px, ' + ty.toFixed(1) + 'px) scale(' + scale.toFixed(3) + ')';
+    }
+
+    function getTouchDist(touches) {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.hypot(dx, dy);
+    }
+
+    box.addEventListener('touchstart', function(e) {
+      if (e.target && e.target.classList && e.target.classList.contains('img-badge')) return;
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        isPanning = false;
+        startDist = getTouchDist(e.touches);
+        startScale = scale;
+      } else if (e.touches.length === 1) {
+        const now = Date.now();
+        if (now - lastTapTime < 280) {
+          e.preventDefault();
+          scale = (scale > 1.2) ? 1 : 2.5;
+          tx = 0;
+          ty = 0;
+          applyTransform();
+          lastTapTime = 0;
+          return;
+        }
+        lastTapTime = now;
+        if (scale > 1.01) {
+          isPanning = true;
+          startX = e.touches[0].clientX;
+          startY = e.touches[0].clientY;
+          startTx = tx;
+          startTy = ty;
+        }
+      }
+    }, { passive: false });
+
+    box.addEventListener('touchmove', function(e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        const dist = getTouchDist(e.touches);
+        if (startDist > 0) {
+          scale = Math.max(1, Math.min(6, startScale * (dist / startDist)));
+          applyTransform();
+        }
+      } else if (e.touches.length === 1 && isPanning && scale > 1.01) {
+        e.preventDefault();
+        e.stopPropagation();
+        tx = startTx + (e.touches[0].clientX - startX);
+        ty = startTy + (e.touches[0].clientY - startY);
+        applyTransform();
+      }
+    }, { passive: false });
+
+    box.addEventListener('touchend', function(e) {
+      if (e.touches.length < 2) {
+        startDist = 0;
+      }
+      if (e.touches.length === 1 && scale > 1.01) {
+        isPanning = true;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        startTx = tx;
+        startTy = ty;
+      } else if (e.touches.length === 0) {
+        isPanning = false;
+        applyTransform();
+      }
+    }, { passive: false });
+
+    // PC 마우스 휠 확대·축소 및 드래그 이동 지원
+    box.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.deltaY < 0 ? 0.22 : -0.22;
+      scale = Math.max(1, Math.min(6, scale + delta));
+      applyTransform();
+    }, { passive: false });
+
+    let mouseDown = false;
+    box.addEventListener('mousedown', function(e) {
+      if (scale <= 1.01) return;
+      mouseDown = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startTx = tx;
+      startTy = ty;
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function(e) {
+      if (!mouseDown || scale <= 1.01) return;
+      tx = startTx + (e.clientX - startX);
+      ty = startTy + (e.clientY - startY);
+      applyTransform();
+    });
+    window.addEventListener('mouseup', function() {
+      mouseDown = false;
+    });
+  });
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+(function initSplitter() {
+  const bar = document.getElementById('splitterBar');
+  const body = document.getElementById('mainBody');
+  if (!bar || !body) return;
+  let dragging = false;
+
+  function onMove(clientX, clientY) {
+    if (!dragging) return;
+    const rect = body.getBoundingClientRect();
+    const isLand = window.matchMedia('(orientation: landscape)').matches;
+    if (isLand) {
+      if (rect.width > 0) {
+        landscapeRatio = Math.max(0.18, Math.min(0.78, (clientX - rect.left) / rect.width));
+        applyPaneSize();
+      }
+    } else {
+      if (rect.height > 0) {
+        const r = Math.max(0.15, Math.min(0.82, (clientY - rect.top) / rect.height));
+        if (currentHasAfter) {
+          portraitAfterRatio = r;
+        } else {
+          portraitSingleRatio = r;
+        }
+        applyPaneSize();
+      }
+    }
+  }
+
+  bar.addEventListener('mousedown', (e) => { dragging = true; e.preventDefault(); });
+  window.addEventListener('mousemove', (e) => onMove(e.clientX, e.clientY));
+  window.addEventListener('mouseup', () => { dragging = false; });
+
+  bar.addEventListener('touchstart', (e) => { dragging = true; }, { passive: true });
+  window.addEventListener('touchmove', (e) => {
+    if (!dragging || !e.touches || e.touches.length === 0) return;
+    onMove(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  window.addEventListener('touchend', () => { dragging = false; });
+})();
+
+function scrollGolgudoToBottom() {
+  const gp = document.getElementById('golgudoPane');
+  if (gp) {
+    setTimeout(() => { gp.scrollTop = gp.scrollHeight; }, 0);
+  }
+}
+
+function centerSelectedUnitInGolgudo() {
+  setTimeout(() => {
+    const gp = document.getElementById('golgudoPane');
+    const sel = document.querySelector('#golgudoBox .u-cell.selected');
+    if (!gp || !sel) return;
+    const gpRect = gp.getBoundingClientRect();
+    const selRect = sel.getBoundingClientRect();
+    const offsetInPane = (selRect.top - gpRect.top) + gp.scrollTop;
+    const targetScroll = offsetInPane - (gp.clientHeight / 2) + (selRect.height / 2);
+    gp.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+  }, 20);
+}
+
+function syncCopyToClipboard(text) {
+  let ok = false;
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.top = '0';
+  ta.style.left = '0';
+  ta.style.width = '2px';
+  ta.style.height = '2px';
+  ta.style.padding = '0';
+  ta.style.border = 'none';
+  ta.style.outline = 'none';
+  ta.style.boxShadow = 'none';
+  ta.style.background = 'transparent';
+  ta.style.opacity = '0.01';
+  ta.style.zIndex = '9999';
+  document.body.appendChild(ta);
+  try {
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    ok = document.execCommand('copy');
+  } catch (e) {
+    ok = false;
+  }
+  document.body.removeChild(ta);
+  return ok;
+}
+
+function copyReportData() {
+  const payload = CLIP_PAYLOAD;
+  const btn = document.getElementById('copyHtmlBtn');
+
+  function onCopied() {
+    if (btn) {
+      btn.textContent = '✅ 복사됨!';
+      setTimeout(() => { btn.textContent = '📋 복사하기'; }, 2200);
+    }
+    // 안드로이드 클립보드 저장이 완전히 마무리된 후 알림창을 띄우기 위해 300ms 지연
+    setTimeout(() => {
+      alert('✅ 골구도 및 사진 데이터가 클립보드에 복사되었습니다! 앱 상단의 [HTML 업로드] -> [클립보드에서 바로 붙여넣기 및 업로드]를 눌러주세요.');
+    }, 300);
+  }
+
+  // 1) 사용자 터치 직후 동기(Synchronous) execCommand('copy')를 최우선 실행하여 content:// 뷰어에서도 즉시 복사
+  const syncOk = syncCopyToClipboard(payload);
+  if (syncOk) {
+    onCopied();
+    return;
+  }
+
+  // 2) 보조: navigator.clipboard.writeText 시도
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(payload).then(onCopied).catch(() => {
+      syncCopyToClipboard(payload);
+      onCopied();
+    });
+  } else {
+    onCopied();
+  }
+}
+
+bindAllPhotoZoom();
+renderAll();
+scrollGolgudoToBottom();
+window.addEventListener('load', scrollGolgudoToBottom);
+</script>
+</body>
+</html>
